@@ -63,7 +63,7 @@ def get_api_answer(current_timestamp):
                 f'текст: {homework_statuses.text}')
         return homework_statuses.json()
     except Exception:
-        raise exceptions.ConnectinError(
+        raise exceptions.ConnectionError(
             'Не верный код ответа: url = {url},'
             'headers = {headers},'
             'params = {params}'.format(**params_request))

@@ -10,7 +10,7 @@ class InvalidResponseCode(Exception):
     """Не верный код ответа."""
 
 
-class ConnectinError(Exception):
+class ConnectionError(Exception):
     """Не верный код ответа."""
 
 
