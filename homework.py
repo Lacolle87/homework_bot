@@ -10,16 +10,17 @@ from http import HTTPStatus
 
 load_dotenv()
 
+RETRY_PERIOD = 600
+
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
-HOMEWORK_STATUSES = {
+HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
@@ -38,7 +39,7 @@ def send_message(bot, message):
         raise exceptions.TelegramError(
             f'Не удалось отправить сообщение {er}')
     else:
-        logging.info(f'Сообщение отправлено {message}')
+        logging.debug(f'Сообщение отправлено {message}')
 
 
 def get_api_answer(current_timestamp):
@@ -74,11 +75,13 @@ def check_response(response):
     logging.debug('Начало проверки')
     if not isinstance(response, dict):
         raise TypeError('Ошибка в типе ответа API')
-    if 'homeworks' not in response or 'current_date' not in response:
+    if 'homeworks' not in response:
         raise exceptions.EmptyResponseFromAPI('Пустой ответ от API')
     homeworks = response.get('homeworks')
     if not isinstance(homeworks, list):
-        raise KeyError('Homeworks не является списком')
+        raise TypeError('Homeworks не является списком')
+    if 'current_date' not in response:
+        raise exceptions.EmptyResponseFromAPI('Пустой ответ от API')
     return homeworks
 
 
@@ -88,13 +91,13 @@ def parse_status(homework):
         raise KeyError('В ответе отсутствует ключ homework_name')
     homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
-    if homework_status not in HOMEWORK_STATUSES:
+    if homework_status not in HOMEWORK_VERDICTS:
         raise ValueError(f'Неизвестный статус работы - {homework_status}')
     return(
         'Изменился статус проверки работы "{homework_name}" {verdict}'
     ).format(
         homework_name=homework_name,
-        verdict=HOMEWORK_STATUSES[homework_status]
+        verdict=HOMEWORK_VERDICTS[homework_status]
     )
 
 
@@ -119,12 +122,13 @@ def main():
         try:
             response = get_api_answer(current_timestamp)
             current_timestamp = response.get(
-                'current_data', current_timestamp)
+                'current_date', current_timestamp)
             new_homeworks = check_response(response)
             if new_homeworks:
                 homework = new_homeworks[0]
                 current_report['name'] = homework.get('homework_name')
-                current_report['output'] = homework.get('status')
+                current_report['output'] = HOMEWORK_VERDICTS[
+                    homework.get('status')]
             else:
                 current_report['output'] = 'Нет новых статусов работ.'
             if current_report != prev_report:
@@ -142,9 +146,9 @@ def main():
             logging.error(message)
             if current_report != prev_report:
                 send_message(bot, message)
-                prev_report = current_report.copy
+                prev_report = current_report.copy()
         finally:
-            time.sleep(RETRY_TIME)
+            time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
