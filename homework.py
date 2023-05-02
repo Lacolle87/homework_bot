@@ -1,14 +1,14 @@
 import logging
 import os
 import sys
+import time
+import json
 from http import HTTPStatus
 
-import json
 import requests
 import telegram
-import time
-
 from dotenv import load_dotenv
+
 import exceptions
 
 load_dotenv()
@@ -55,7 +55,7 @@ def get_api_answer(current_timestamp):
         'params': {'from_date': timestamp},
     }
     try:
-        logging.info(
+        logger.info(
             'Начало запроса: url = {url},'
             'headers = {headers},'
             'params = {params}'.format(**params_request))
