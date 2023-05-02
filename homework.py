@@ -1,12 +1,15 @@
+import logging
+import os
+import sys
+from http import HTTPStatus
+
+import json
+import requests
 import telegram
 import time
-import requests
-import logging
-import sys
-import os
-import exceptions
+
 from dotenv import load_dotenv
-from http import HTTPStatus
+import exceptions
 
 load_dotenv()
 
@@ -25,11 +28,13 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
+logger = logging.getLogger(__name__)
+
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
     try:
-        logging.info('Начало отправки')
+        logger.info('Начало отправки')
         bot.send_message(
             chat_id=TELEGRAM_CHAT_ID,
             text=message,
@@ -38,7 +43,7 @@ def send_message(bot, message):
         raise exceptions.TelegramError(
             f'Не удалось отправить сообщение {er}')
     else:
-        logging.debug(f'Сообщение отправлено {message}')
+        logger.debug(f'Сообщение отправлено {message}')
 
 
 def get_api_answer(current_timestamp):
@@ -58,20 +63,22 @@ def get_api_answer(current_timestamp):
         if homework_statuses.status_code != HTTPStatus.OK:
             raise exceptions.InvalidResponseCode(
                 'Не удалось получить ответ API, '
-                f'ошибка: {homework_statuses.status_code}'
-                f'причина: {homework_statuses.reason}'
+                f'ошибка: {homework_statuses.status_code}, '
+                f'причина: {homework_statuses.reason}, '
                 f'текст: {homework_statuses.text}')
         return homework_statuses.json()
-    except Exception:
+    except json.JSONDecodeError as e:
         raise exceptions.ConnectionError(
-            'Не верный код ответа: url = {url},'
-            'headers = {headers},'
-            'params = {params}'.format(**params_request))
+            'Не удалось преобразовать ответ в JSON: '
+            f'ошибка: {e}')
+    except requests.exceptions.RequestException as e:
+        raise exceptions.ConnectionError(
+            f'Ошибка соединения: {e}')
 
 
 def check_response(response):
     """Проверить валидность ответа."""
-    logging.debug('Начало проверки')
+    logger.debug('Начало проверки')
     if not isinstance(response, dict):
         raise TypeError('Ошибка в типе ответа API')
     if 'homeworks' not in response:
@@ -108,7 +115,7 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     if not check_tokens():
-        logging.critical('Отсутствует обязательная переменная окружения')
+        logger.critical('Отсутствует обязательная переменная окружения')
         sys.exit('Отсутствуют переменные окружения')
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
@@ -135,14 +142,14 @@ def main():
                 send_message(bot, send)
                 prev_report = current_report.copy()
             else:
-                logging.debug('Статус не поменялся')
+                logger.debug('Статус не поменялся')
         except exceptions.NotForSending as er:
             message = f'Сбой в работе программы: {er}'
-            logging.error(message)
+            logger.error(message)
         except Exception as er:
             message = f'Сбой в работе программы: {er}'
             current_report['output'] = message
-            logging.error(message)
+            logger.error(message)
             if current_report != prev_report:
                 send_message(bot, message)
                 prev_report = current_report.copy()
